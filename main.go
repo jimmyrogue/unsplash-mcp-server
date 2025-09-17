@@ -75,10 +75,28 @@ func runStdio() {
 
 // runHTTP exposes the server through the MCP streamable HTTP transport.
 func runHTTP(addr string) {
+	log.Printf("Creating MCP server...")
+
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("Panic recovered in runHTTP: %v", r)
+		}
+	}()
+
 	server := newUnsplashServer()
-	handler := mcp.NewStreamableHTTPHandler(func(_ *http.Request) *mcp.Server {
+	log.Printf("MCP server created successfully")
+
+	log.Printf("Creating streamable HTTP handler...")
+	handler := mcp.NewStreamableHTTPHandler(func(req *http.Request) *mcp.Server {
+		log.Printf("Handler called for request: %s %s", req.Method, req.URL.Path)
+		defer func() {
+			if r := recover(); r != nil {
+				log.Printf("Panic recovered in handler: %v", r)
+			}
+		}()
 		return server
 	}, nil)
+	log.Printf("HTTP handler created successfully")
 
 	log.Printf("Unsplash MCP server listening on http://%s", addr)
 
