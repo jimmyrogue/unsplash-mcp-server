@@ -54,6 +54,7 @@ var (
 	}
 )
 
+// searchPhotosArgs captures the incoming tool arguments from the client.
 type searchPhotosArgs struct {
 	Query       string  `json:"query" jsonschema:"Search keyword"`
 	Page        int     `json:"page" jsonschema:"Page number (1-based). Default: 1"`
@@ -78,6 +79,7 @@ type unsplashSearchAPIResponse struct {
 	Results    []unsplashPhoto `json:"results"`
 }
 
+// searchPhotosResult is returned as structured tool output for the client.
 type searchPhotosResult struct {
 	Query       string          `json:"query"`
 	Page        int             `json:"page"`
@@ -91,6 +93,46 @@ type searchPhotosResult struct {
 	RetrievedAt time.Time       `json:"retrieved_at"`
 }
 
+// normalizeEnum trims, lowercases, and validates a required enum value.
+func normalizeEnum(value, field, fallback string, allowed map[string]struct{}) (string, error) {
+	v := strings.ToLower(strings.TrimSpace(value))
+	if v == "" {
+		v = fallback
+	}
+	if _, ok := allowed[v]; !ok {
+		return "", fmt.Errorf("invalid %s value: %s", field, v)
+	}
+	return v, nil
+}
+
+// normalizeOptionalEnum validates an optional enum value, treating blank input as unset.
+func normalizeOptionalEnum(value *string, field string, allowed map[string]struct{}) (string, error) {
+	if value == nil {
+		return "", nil
+	}
+	v := strings.ToLower(strings.TrimSpace(*value))
+	if v == "" {
+		return "", nil
+	}
+	if _, ok := allowed[v]; !ok {
+		return "", fmt.Errorf("invalid %s value: %s", field, v)
+	}
+	return v, nil
+}
+
+// clampPerPage keeps the per_page argument within Unsplash's supported bounds.
+func clampPerPage(value int) int {
+	switch {
+	case value <= 0:
+		return defaultPerPage
+	case value > maxPerPage:
+		return maxPerPage
+	default:
+		return value
+	}
+}
+
+// handleSearchPhotos calls the Unsplash Search API and returns structured results.
 func handleSearchPhotos(ctx context.Context, _ *mcp.CallToolRequest, args searchPhotosArgs) (*mcp.CallToolResult, searchPhotosResult, error) {
 	query := strings.TrimSpace(args.Query)
 	if query == "" {
@@ -102,40 +144,21 @@ func handleSearchPhotos(ctx context.Context, _ *mcp.CallToolRequest, args search
 		page = defaultPage
 	}
 
-	perPage := args.PerPage
-	switch {
-	case perPage <= 0:
-		perPage = defaultPerPage
-	case perPage > maxPerPage:
-		perPage = maxPerPage
+	perPage := clampPerPage(args.PerPage)
+
+	orderBy, err := normalizeEnum(args.OrderBy, "order_by", defaultOrderBy, allowedOrderBy)
+	if err != nil {
+		return nil, searchPhotosResult{}, err
 	}
 
-	orderBy := strings.ToLower(strings.TrimSpace(args.OrderBy))
-	if orderBy == "" {
-		orderBy = defaultOrderBy
-	}
-	if _, ok := allowedOrderBy[orderBy]; !ok {
-		return nil, searchPhotosResult{}, fmt.Errorf("invalid order_by value: %s", orderBy)
+	color, err := normalizeOptionalEnum(args.Color, "color", allowedColors)
+	if err != nil {
+		return nil, searchPhotosResult{}, err
 	}
 
-	var color string
-	if args.Color != nil {
-		color = strings.ToLower(strings.TrimSpace(*args.Color))
-		if color != "" {
-			if _, ok := allowedColors[color]; !ok {
-				return nil, searchPhotosResult{}, fmt.Errorf("invalid color value: %s", color)
-			}
-		}
-	}
-
-	var orientation string
-	if args.Orientation != nil {
-		orientation = strings.ToLower(strings.TrimSpace(*args.Orientation))
-		if orientation != "" {
-			if _, ok := allowedOrientations[orientation]; !ok {
-				return nil, searchPhotosResult{}, fmt.Errorf("invalid orientation value: %s", orientation)
-			}
-		}
+	orientation, err := normalizeOptionalEnum(args.Orientation, "orientation", allowedOrientations)
+	if err != nil {
+		return nil, searchPhotosResult{}, err
 	}
 
 	accessKey := strings.TrimSpace(os.Getenv("UNSPLASH_ACCESS_KEY"))

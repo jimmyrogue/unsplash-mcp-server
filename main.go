@@ -16,13 +16,18 @@ var (
 	port = flag.Int("port", 8080, "port to listen on")
 )
 
+const usageTemplate = `Usage: %s [stdio|server] [flags]
+
+Modes:
+  stdio   Run the MCP server over stdin/stdout (default)
+  server  Run an HTTP server exposing the MCP tool
+
+Flags (server mode only):
+`
+
 func main() {
 	flag.Usage = func() {
-		fmt.Fprintf(flag.CommandLine.Output(), "Usage: %s [stdio|server] [flags]\n", os.Args[0])
-		fmt.Fprintf(flag.CommandLine.Output(), "\nModes:\n")
-		fmt.Fprintf(flag.CommandLine.Output(), "  stdio   Run the MCP server over stdin/stdout (default)\n")
-		fmt.Fprintf(flag.CommandLine.Output(), "  server  Run an HTTP server exposing the MCP tool\n")
-		fmt.Fprintf(flag.CommandLine.Output(), "\nFlags (server mode only):\n")
+		fmt.Fprintf(flag.CommandLine.Output(), usageTemplate, os.Args[0])
 		flag.PrintDefaults()
 	}
 
@@ -45,6 +50,7 @@ func main() {
 	}
 }
 
+// newUnsplashServer wires up the MCP server instance with all Unsplash tools.
 func newUnsplashServer() *mcp.Server {
 	srv := mcp.NewServer(&mcp.Implementation{
 		Name:    "Unsplash MCP Server",
@@ -59,6 +65,7 @@ func newUnsplashServer() *mcp.Server {
 	return srv
 }
 
+// runStdio serves the MCP server over stdin/stdout for local tool integrations.
 func runStdio() {
 	server := newUnsplashServer()
 	if err := server.Run(context.Background(), &mcp.StdioTransport{}); err != nil {
@@ -66,6 +73,7 @@ func runStdio() {
 	}
 }
 
+// runHTTP exposes the server through the MCP streamable HTTP transport.
 func runHTTP(addr string) {
 	server := newUnsplashServer()
 	handler := mcp.NewStreamableHTTPHandler(func(_ *http.Request) *mcp.Server {
