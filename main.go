@@ -73,7 +73,7 @@ func runStdio() {
 	}
 }
 
-// runHTTP exposes the server through the MCP streamable HTTP transport.
+// runHTTP exposes the server through the MCP SSE HTTP transport.
 func runHTTP(addr string) {
 	log.Printf("Creating MCP server...")
 
@@ -86,8 +86,9 @@ func runHTTP(addr string) {
 	server := newUnsplashServer()
 	log.Printf("MCP server created successfully")
 
-	log.Printf("Creating streamable HTTP handler...")
-	handler := mcp.NewStreamableHTTPHandler(func(req *http.Request) *mcp.Server {
+	log.Printf("Creating SSE HTTP handler...")
+	// 使用NewSSEHTTPHandler，注意正确的函数签名
+	mcpHandler := mcp.NewSSEHTTPHandler(func(req *http.Request) *mcp.Server {
 		log.Printf("Handler called for request: %s %s", req.Method, req.URL.Path)
 		defer func() {
 			if r := recover(); r != nil {
@@ -95,12 +96,26 @@ func runHTTP(addr string) {
 			}
 		}()
 		return server
-	}, nil)
+	})
 	log.Printf("HTTP handler created successfully")
 
-	log.Printf("Unsplash MCP server listening on http://%s", addr)
+	// 创建一个多路复用器来处理不同的路径
+	mux := http.NewServeMux()
 
-	if err := http.ListenAndServe(addr, loggingHandler(handler)); err != nil {
+	// 健康检查端点
+	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"status":"ok","service":"unsplash-mcp-server"}`))
+	})
+
+	// MCP端点
+	mux.Handle("/", mcpHandler)
+
+	log.Printf("Unsplash MCP server listening on http://%s", addr)
+	log.Printf("Health check available at http://%s/health", addr)
+
+	if err := http.ListenAndServe(addr, loggingHandler(mux)); err != nil {
 		log.Printf("http server error: %v", err)
 	}
 }
