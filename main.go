@@ -73,7 +73,7 @@ func runStdio() {
 	}
 }
 
-// runHTTP exposes the server through the MCP SSE HTTP transport.
+// runHTTP exposes the server through the MCP streamable HTTP transport.
 func runHTTP(addr string) {
 	log.Printf("Creating MCP server...")
 
@@ -86,9 +86,9 @@ func runHTTP(addr string) {
 	server := newUnsplashServer()
 	log.Printf("MCP server created successfully")
 
-	log.Printf("Creating SSE HTTP handler...")
-	// 使用NewSSEHTTPHandler，注意正确的函数签名
-	mcpHandler := mcp.NewSSEHTTPHandler(func(req *http.Request) *mcp.Server {
+	log.Printf("Creating streamable HTTP handler...")
+	// 使用原始的NewStreamableHTTPHandler - 这是正确的API
+	mcpHandler := mcp.NewStreamableHTTPHandler(func(req *http.Request) *mcp.Server {
 		log.Printf("Handler called for request: %s %s", req.Method, req.URL.Path)
 		defer func() {
 			if r := recover(); r != nil {
@@ -96,7 +96,7 @@ func runHTTP(addr string) {
 			}
 		}()
 		return server
-	})
+	}, nil)
 	log.Printf("HTTP handler created successfully")
 
 	// 创建一个多路复用器来处理不同的路径
